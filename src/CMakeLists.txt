@@ -10,6 +10,9 @@ kconfig_add_kcfg_files(effect_SOURCES
 )
 
 add_library(kwin_effect_smoothswipe MODULE ${effect_SOURCES})
+# The effect's plugin id is derived from the .so basename; it must be
+# "smoothswipe" to match the kwinrc enable key and the KCM's reconfigure call.
+set_target_properties(kwin_effect_smoothswipe PROPERTIES OUTPUT_NAME "smoothswipe")
 target_compile_definitions(kwin_effect_smoothswipe PRIVATE
     KPLUGINFACTORY_PLUGIN_CLASS_INTERNAL_NAME=kwin_effect_smoothswipe_factory
 )
