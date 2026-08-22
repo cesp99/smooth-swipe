@@ -1,0 +1,5 @@
+File=smoothswipe.kcfg
+ClassName=SmoothSwipeConfig
+NameSpace=KWin
+Singleton=true
+Mutators=true

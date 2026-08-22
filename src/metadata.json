@@ -1,0 +1,21 @@
+{
+    "KPlugin": {
+        "Id": "smoothswipe",
+        "Authors": [
+            {
+                "Email": "carlo@aploi.de",
+                "Name": "Carlo Esposito"
+            }
+        ],
+        "Category": "Virtual Desktop Switching Animation",
+        "Description": "macOS-like smooth swipe between virtual desktops, with finger momentum carried into the release animation",
+        "EnabledByDefault": false,
+        "License": "GPL-2.0-or-later",
+        "Name": "Smooth Swipe",
+        "Version": "1.0.0"
+    },
+    "X-KDE-ConfigModule": "kwin_smoothswipe_config",
+    "org.kde.kwin.effect": {
+        "exclusiveGroup": "desktop-animations"
+    }
+}

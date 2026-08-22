@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SmoothSwipeEffectConfig</class>
+ <widget class="QWidget" name="SmoothSwipeEffectConfig">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>420</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <layout class="QFormLayout" name="formLayout">
+   <item row="0" column="0">
+    <widget class="QLabel" name="labelStiffness">
+     <property name="text">
+      <string>Spring stiffness:</string>
+     </property>
+     <property name="toolTip">
+      <string>Higher values settle onto the target desktop faster and feel snappier.</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QDoubleSpinBox" name="kcfg_SpringStiffness">
+     <property name="minimum">
+      <double>50.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>2000.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>25.000000000000000</double>
+     </property>
+     <property name="decimals">
+      <number>0</number>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="labelDamping">
+     <property name="text">
+      <string>Damping ratio:</string>
+     </property>
+     <property name="toolTip">
+      <string>1.0 is critically damped (macOS-like). Below 1.0 adds bounce, above 1.0 feels heavier.</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QDoubleSpinBox" name="kcfg_DampingRatio">
+     <property name="minimum">
+      <double>0.300000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>3.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.050000000000000</double>
+     </property>
+     <property name="decimals">
+      <number>2</number>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="labelVelocity">
+     <property name="text">
+      <string>Momentum transfer:</string>
+     </property>
+     <property name="toolTip">
+      <string>How much of your fingers' velocity carries into the release animation. 0% behaves like the stock Slide effect.</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QSpinBox" name="kcfg_VelocityTransfer">
+     <property name="minimum">
+      <number>0</number>
+     </property>
+     <property name="maximum">
+      <number>200</number>
+     </property>
+     <property name="singleStep">
+      <number>10</number>
+     </property>
+     <property name="suffix">
+      <string>%</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="0">
+    <widget class="QLabel" name="labelHGap">
+     <property name="text">
+      <string>Horizontal gap:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="QSpinBox" name="kcfg_HorizontalGap">
+     <property name="minimum">
+      <number>0</number>
+     </property>
+     <property name="maximum">
+      <number>1000</number>
+     </property>
+     <property name="suffix">
+      <string> px</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0">
+    <widget class="QLabel" name="labelVGap">
+     <property name="text">
+      <string>Vertical gap:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="1">
+    <widget class="QSpinBox" name="kcfg_VerticalGap">
+     <property name="minimum">
+      <number>0</number>
+     </property>
+     <property name="maximum">
+      <number>1000</number>
+     </property>
+     <property name="suffix">
+      <string> px</string>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="0" colspan="2">
+    <widget class="QCheckBox" name="kcfg_SlideBackground">
+     <property name="text">
+      <string>Slide desktop background</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
