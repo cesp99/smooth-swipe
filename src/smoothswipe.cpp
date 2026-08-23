@@ -26,16 +26,16 @@
 namespace KWin
 {
 
-// Injected release velocities are capped so a spurious sample can never fling the
-// view across the whole grid.
+// Release velocities are capped so a spurious input event can never fling the view
+// across the whole grid.
 static constexpr qreal s_maxReleaseSpeed = 10.0; // desktops per second
 
-// A finger that rests longer than this before lifting has visually stopped; carrying
-// the last movement's velocity into the release would feel like a phantom push.
-static constexpr qint64 s_velocityExpiryNs = 100'000'000; // 100 ms
-
-// Smoothing time constant for the exponential moving average over velocity samples.
-static constexpr qreal s_velocitySmoothingTau = 0.04; // seconds
+// Spring constants used while the fingers are down: the anchor follows the gesture
+// position and the view eases towards it. Stiff enough that the lag is imperceptible
+// (~18 ms time constant), soft enough to filter touchpad jitter and the misalignment
+// between input event timing and display refresh.
+static constexpr qreal s_trackingStiffness = 3000.0;
+static constexpr qreal s_trackingDampingRatio = 1.0;
 
 SmoothSwipeEffectScreen::SmoothSwipeEffectScreen(SmoothSwipeEffect *parent, LogicalOutput *screen)
     : m_parent(parent)
@@ -115,6 +115,28 @@ void SmoothSwipeEffectScreen::reconfigure()
     m_motionY = SpringMotion(springConstant, dampingRatio);
 }
 
+void SmoothSwipeEffectScreen::setSpringParams(qreal springConstant, qreal dampingRatio)
+{
+    SpringMotion x(springConstant, dampingRatio);
+    x.setPosition(m_motionX.position());
+    x.setVelocity(m_motionX.velocity());
+    x.setAnchor(m_motionX.anchor());
+    m_motionX = x;
+
+    SpringMotion y(springConstant, dampingRatio);
+    y.setPosition(m_motionY.position());
+    y.setVelocity(m_motionY.velocity());
+    y.setAnchor(m_motionY.anchor());
+    m_motionY = y;
+}
+
+QPointF SmoothSwipeEffectScreen::springPosition() const
+{
+    const QSize virtualSpaceSize = effects->virtualScreenSize();
+    return QPointF(m_motionX.position() / virtualSpaceSize.width(),
+                   m_motionY.position() / virtualSpaceSize.height());
+}
+
 void SmoothSwipeEffect::prePaintScreen(ScreenPrePaintData &data)
 {
     if (data.screen) {
@@ -139,19 +161,23 @@ void SmoothSwipeEffectScreen::prePaintScreen(ScreenPrePaintData &data)
     case State::Inactive:
         Q_UNREACHABLE();
 
+    case State::ActiveGesture: {
+        // The anchor follows the finger; the spring below eases the rendered
+        // position towards it, filtering jitter and event/frame misalignment.
+        const QSize virtualSpaceSize = effects->virtualScreenSize();
+        m_motionX.setAnchor(m_gesturePos.x() * virtualSpaceSize.width());
+        m_motionY.setAnchor(m_gesturePos.y() * virtualSpaceSize.height());
+        [[fallthrough]];
+    }
     case State::ActiveAnimation: {
         const std::chrono::milliseconds timeDelta = m_clock.tick(data.view);
 
         m_motionX.advance(timeDelta);
         m_motionY.advance(timeDelta);
 
-        const QSize virtualSpaceSize = effects->virtualScreenSize();
-        m_paintCtx.position = QPointF(m_motionX.position() / virtualSpaceSize.width(), m_motionY.position() / virtualSpaceSize.height());
+        m_paintCtx.position = springPosition();
         break;
     }
-    case State::ActiveGesture:
-        m_paintCtx.position = m_gesturePos;
-        break;
     }
 
     // Clipping
@@ -359,80 +385,17 @@ bool SmoothSwipeEffectScreen::shouldElevate(const EffectWindow *w) const
 }
 
 /*
- * Feed one gesture position sample (desktops as unit) into the velocity tracker.
- */
-void SmoothSwipeEffectScreen::trackGestureSample(const QPointF &pos)
-{
-    if (!m_gestureActive) {
-        m_gestureActive = true;
-        m_gestureTimer.start();
-        m_lastSampleNs = 0;
-        m_lastSamplePos = pos;
-        m_gestureVelocity = QPointF(0, 0);
-        return;
-    }
-
-    const qint64 nowNs = m_gestureTimer.nsecsElapsed();
-    const qreal dt = (nowNs - m_lastSampleNs) / 1'000'000'000.0;
-    if (dt <= 0) {
-        return;
-    }
-
-    QPointF delta = pos - m_lastSamplePos;
-    // With roll-over enabled, forcePositivePosition() can make the position jump by a
-    // whole grid dimension between samples; use the shortest wrapped distance instead.
-    if (effects->optionRollOverDesktops()) {
-        const int w = effects->desktopGridWidth();
-        const int h = effects->desktopGridHeight();
-        if (delta.x() > w / 2.0) {
-            delta.setX(delta.x() - w);
-        } else if (delta.x() < -w / 2.0) {
-            delta.setX(delta.x() + w);
-        }
-        if (delta.y() > h / 2.0) {
-            delta.setY(delta.y() - h);
-        } else if (delta.y() < -h / 2.0) {
-            delta.setY(delta.y() + h);
-        }
-    }
-
-    const QPointF instantaneous = delta / dt;
-    const qreal alpha = 1.0 - std::exp(-dt / s_velocitySmoothingTau);
-    m_gestureVelocity = alpha * instantaneous + (1.0 - alpha) * m_gestureVelocity;
-
-    m_lastSampleNs = nowNs;
-    m_lastSamplePos = pos;
-}
-
-/*
- * Consume the tracked gesture velocity (desktops/second). Returns nullopt when no
- * gesture was being tracked, and zero when the finger had already stopped moving
- * before it was lifted.
- */
-std::optional<QPointF> SmoothSwipeEffectScreen::takeReleaseVelocity()
-{
-    if (!m_gestureActive) {
-        return std::nullopt;
-    }
-    m_gestureActive = false;
-
-    if (m_gestureTimer.nsecsElapsed() - m_lastSampleNs > s_velocityExpiryNs) {
-        return QPointF(0, 0);
-    }
-    return m_gestureVelocity;
-}
-
-/*
  * This function is called when the desktop changes.
  * Called AFTER the gesture is released.
  * Sets up animation to round off to the new current desktop.
  */
-void SmoothSwipeEffectScreen::startAnimation(const QPointF &oldPos, VirtualDesktop *current, EffectWindow *movingWindow,
-                                             const std::optional<QPointF> &velocity)
+void SmoothSwipeEffectScreen::startAnimation(const QPointF &oldPos, VirtualDesktop *current, EffectWindow *movingWindow)
 {
     const bool wasInactive = m_state == State::Inactive;
+    const bool wasGesture = m_state == State::ActiveGesture;
     if (wasInactive) {
         prepareSwitching();
+        m_clock.reset();
     }
 
     m_state = State::ActiveAnimation;
@@ -450,14 +413,15 @@ void SmoothSwipeEffectScreen::startAnimation(const QPointF &oldPos, VirtualDeskt
     m_motionY.setAnchor(m_endPos.y() * virtualSpaceSize.height());
     m_motionY.setPosition(m_startPos.y() * virtualSpaceSize.height());
 
-    if (velocity.has_value()) {
-        // Momentum carry-over: hand the finger velocity to the spring so the release
-        // animation continues the gesture instead of starting from a dead stop.
-        const QPointF v = velocity.value() * m_parent->velocityTransfer();
-        const qreal vx = std::clamp(v.x(), -s_maxReleaseSpeed, s_maxReleaseSpeed);
-        const qreal vy = std::clamp(v.y(), -s_maxReleaseSpeed, s_maxReleaseSpeed);
-        m_motionX.setVelocity(vx * virtualSpaceSize.width());
-        m_motionY.setVelocity(vy * virtualSpaceSize.height());
+    if (wasGesture) {
+        // Momentum carry-over: the tracking spring's velocity is the filtered finger
+        // velocity, so the release continues the gesture. Scale it by the configured
+        // transfer amount and cap it against spurious input.
+        const qreal transfer = m_parent->velocityTransfer();
+        const qreal maxVx = s_maxReleaseSpeed * virtualSpaceSize.width();
+        const qreal maxVy = s_maxReleaseSpeed * virtualSpaceSize.height();
+        m_motionX.setVelocity(std::clamp(m_motionX.velocity() * transfer, -maxVx, maxVx));
+        m_motionY.setVelocity(std::clamp(m_motionY.velocity() * transfer, -maxVy, maxVy));
     } else if (wasInactive) {
         // Fresh keyboard-driven switch: don't reuse a stale velocity from whatever
         // animation ran last.
@@ -467,7 +431,9 @@ void SmoothSwipeEffectScreen::startAnimation(const QPointF &oldPos, VirtualDeskt
     // Otherwise (retarget while already animating) the spring keeps its current
     // velocity, so chained switches stay continuous.
 
-    m_clock.reset();
+    // Switch to the configured release spring constants (no-op if already animating).
+    setSpringParams(SmoothSwipeConfig::springStiffness() / effects->animationTimeFactor(),
+                    SmoothSwipeConfig::dampingRatio());
 
     effects->addRepaint(m_screen->geometry());
 }
@@ -519,7 +485,6 @@ void SmoothSwipeEffectScreen::finishedSwitching()
 
     m_windowData.clear();
     m_movingWindow = nullptr;
-    m_gestureActive = false;
     m_state = State::Inactive;
 }
 
@@ -544,25 +509,20 @@ void SmoothSwipeEffect::desktopChanged(VirtualDesktop *old, VirtualDesktop *curr
 void SmoothSwipeEffectScreen::desktopChanged(VirtualDesktop *old, VirtualDesktop *current, EffectWindow *with)
 {
     QPointF previousPos;
-    std::optional<QPointF> releaseVelocity;
     switch (m_state) {
     case State::Inactive:
         previousPos = effects->desktopGridCoords(old);
         break;
 
-    case State::ActiveAnimation: {
-        const QSize virtualSpaceSize = effects->virtualScreenSize();
-        previousPos = QPointF(m_motionX.position() / virtualSpaceSize.width(), m_motionY.position() / virtualSpaceSize.height());
-        break;
-    }
-
+    case State::ActiveAnimation:
     case State::ActiveGesture:
-        previousPos = m_gesturePos;
-        releaseVelocity = takeReleaseVelocity();
+        // Continue from the rendered spring position, not the raw gesture position,
+        // so the hand-off into the release animation is seamless.
+        previousPos = springPosition();
         break;
     }
 
-    startAnimation(previousPos, current, with, releaseVelocity);
+    startAnimation(previousPos, current, with);
 }
 
 void SmoothSwipeEffect::desktopChanging(VirtualDesktop *old, QPointF desktopOffset, EffectWindow *with, LogicalOutput *output)
@@ -585,8 +545,10 @@ void SmoothSwipeEffect::desktopChanging(VirtualDesktop *old, QPointF desktopOffs
 
 void SmoothSwipeEffectScreen::desktopChanging(VirtualDesktop *old, QPointF desktopOffset, EffectWindow *with)
 {
-    if (m_state == State::Inactive) {
+    const bool wasInactive = m_state == State::Inactive;
+    if (wasInactive) {
         prepareSwitching();
+        m_clock.reset();
     }
 
     m_state = State::ActiveGesture;
@@ -603,7 +565,18 @@ void SmoothSwipeEffectScreen::desktopChanging(VirtualDesktop *old, QPointF deskt
         m_gesturePos = moveInsideDesktopGrid(m_gesturePos);
     }
 
-    trackGestureSample(m_gesturePos);
+    // Follow the finger through a stiff spring; anchors update in prePaintScreen().
+    setSpringParams(s_trackingStiffness, s_trackingDampingRatio);
+    if (wasInactive) {
+        // Start the spring exactly at the finger so there's no catch-up wobble.
+        const QSize virtualSpaceSize = effects->virtualScreenSize();
+        m_motionX.setPosition(m_gesturePos.x() * virtualSpaceSize.width());
+        m_motionX.setVelocity(0);
+        m_motionY.setPosition(m_gesturePos.y() * virtualSpaceSize.height());
+        m_motionY.setVelocity(0);
+    }
+    // Grabbing mid-animation keeps the spring's position and velocity: the view is
+    // caught where it visually is and eases to the finger from there.
 
     effects->addRepaint(m_screen->geometry());
 }
@@ -622,7 +595,7 @@ void SmoothSwipeEffect::desktopChangingCancelled()
 void SmoothSwipeEffectScreen::desktopChangingCancelled()
 {
     if (m_state != State::Inactive) {
-        startAnimation(m_gesturePos, effects->currentDesktop(m_screen), nullptr, takeReleaseVelocity());
+        startAnimation(springPosition(), effects->currentDesktop(m_screen), nullptr);
     }
 }
 

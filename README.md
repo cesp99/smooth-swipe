@@ -5,10 +5,13 @@ virtual desktops feel like macOS.
 
 It is a fork of KWin's built-in **Slide** effect with the physics reworked:
 
-- **Momentum carry-over** — the velocity of your fingers at the moment you lift
-  them is injected into the release animation, instead of the animation starting
-  from a dead stop like stock Slide. This is the main thing that makes macOS
-  swipes feel "connected" to your fingers.
+- **One continuous spring simulation** — while your fingers are down, the view
+  follows them through a very stiff spring advanced every frame, which filters
+  touchpad jitter and the misalignment between input events and display refresh
+  (stock Slide hard-locks to raw gesture events). On release, the spring simply
+  retargets to the destination desktop, keeping its position *and* velocity —
+  so your fingers' momentum carries into the release animation instead of it
+  starting from a dead stop. Grabbing mid-animation is seamless the same way.
 - **Tunable spring physics** — spring stiffness and damping ratio are exposed in
   the effect's settings (stock hardcodes an overdamped 300 / 1.1 spring).
   Defaults are tuned to feel like macOS Spaces: stiffer and critically damped,

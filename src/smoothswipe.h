@@ -20,10 +20,6 @@
 
 #include "springmotion.h"
 
-#include <QElapsedTimer>
-
-#include <optional>
-
 namespace KWin
 {
 
@@ -40,15 +36,17 @@ namespace KWin
  *
  * What Smooth Swipe adds over Slide:
  *
- * 1. Momentum carry-over: finger velocity is tracked during the gesture (exponentially
- *    smoothed) and injected into the spring when the release animation starts. Stock
- *    Slide starts the release animation from zero velocity, which is the visible
- *    "hitch" between tracking and animation.
+ * 1. One continuous spring simulation across the whole interaction. While the fingers
+ *    are down, the spring's anchor follows the gesture position and is advanced every
+ *    frame with a very stiff tracking spring — filtering touchpad jitter and the
+ *    misalignment between input events and display refresh. On release, the anchor
+ *    retargets to the destination desktop and the spring switches to the configured
+ *    release constants, keeping position and velocity. Stock Slide instead hard-locks
+ *    to raw gesture events and starts the release animation from zero velocity.
  * 2. Configurable spring stiffness / damping ratio / momentum transfer.
  *
  * Positions use desktops as the unit (1.2 = desktop index 1, shifted 0.2 towards 2).
- * The spring simulation runs in virtual-screen pixels; velocities tracked here are in
- * desktops/second and converted when handed to the spring.
+ * The spring simulation runs in virtual-screen pixels.
  */
 
 class SmoothSwipeEffect;
@@ -84,13 +82,12 @@ private:
     QPointF forcePositivePosition(QPointF p) const;
     void optimizePath(); // Find the best path to target desktop
 
-    // Momentum tracking. Samples are fed from desktopChanging(); the release
-    // velocity (desktops/second) is consumed once when the gesture ends.
-    void trackGestureSample(const QPointF &pos);
-    std::optional<QPointF> takeReleaseVelocity();
+    // Swap the springs' constants while preserving position, velocity and anchor.
+    void setSpringParams(qreal springConstant, qreal dampingRatio);
+    // Current spring position in desktop units.
+    QPointF springPosition() const;
 
-    void startAnimation(const QPointF &oldPos, VirtualDesktop *current, EffectWindow *movingWindow = nullptr,
-                        const std::optional<QPointF> &velocity = std::nullopt);
+    void startAnimation(const QPointF &oldPos, VirtualDesktop *current, EffectWindow *movingWindow = nullptr);
     void prepareSwitching();
 
 private:
@@ -109,13 +106,6 @@ private:
     QPointF m_endPos;
 
     QPointF m_gesturePos;
-
-    // Gesture velocity tracking
-    QElapsedTimer m_gestureTimer;
-    bool m_gestureActive = false;
-    QPointF m_gestureVelocity; // smoothed, desktops per second
-    QPointF m_lastSamplePos;
-    qint64 m_lastSampleNs = 0;
 
     EffectWindow *m_movingWindow = nullptr;
     AnimationClock m_clock;
