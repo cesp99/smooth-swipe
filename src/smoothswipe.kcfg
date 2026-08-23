@@ -16,12 +16,12 @@
             <default>true</default>
         </entry>
         <entry name="SpringStiffness" type="Double">
-            <default>450.0</default>
+            <default>100.0</default>
             <min>50.0</min>
             <max>2000.0</max>
         </entry>
         <entry name="DampingRatio" type="Double">
-            <default>1.0</default>
+            <default>0.95</default>
             <min>0.3</min>
             <max>3.0</max>
         </entry>

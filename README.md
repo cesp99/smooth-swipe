@@ -14,8 +14,9 @@ It is a fork of KWin's built-in **Slide** effect with the physics reworked:
   starting from a dead stop. Grabbing mid-animation is seamless the same way.
 - **Tunable spring physics** — spring stiffness and damping ratio are exposed in
   the effect's settings (stock hardcodes an overdamped 300 / 1.1 spring).
-  Defaults are tuned to feel like macOS Spaces: stiffer and critically damped,
-  with a subtle natural overshoot on fast flicks.
+  Defaults are tuned by hand to feel like macOS Spaces: a soft glidey spring
+  (stiffness 100) just under critical damping (0.95), so fast flicks settle
+  with a subtle natural overshoot.
 - **Momentum transfer amount** is configurable (0–200%).
 
 ## Requirements
