@@ -205,12 +205,12 @@ void SmoothSwipeEffectScreen::prePaintScreen(ScreenPrePaintData &data)
     data.mask |= Effect::PAINT_SCREEN_TRANSFORMED;
 }
 
-void SmoothSwipeEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport, int mask, const Region &deviceRegion, LogicalOutput *screen)
+bool SmoothSwipeEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport, int mask, const Region &deviceRegion, LogicalOutput *screen)
 {
     if (SmoothSwipeEffectScreen *effectScreen = getEffectScreen(screen)) {
         effectScreen->paintScreen();
     }
-    effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
+    return effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
 }
 
 void SmoothSwipeEffectScreen::paintScreen()
@@ -274,24 +274,23 @@ void SmoothSwipeEffect::prePaintWindow(RenderView *view, EffectWindow *w, Window
     effects->prePaintWindow(view, w, data);
 }
 
-void SmoothSwipeEffect::paintWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceGeometry, WindowPaintData &data)
+bool SmoothSwipeEffect::paintWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceGeometry, WindowPaintData &data)
 {
     if (SmoothSwipeEffectScreen *effectScreen = getEffectScreen(w->screen())) {
-        effectScreen->paintWindow(renderTarget, viewport, w, mask, deviceGeometry, data);
+        return effectScreen->paintWindow(renderTarget, viewport, w, mask, deviceGeometry, data);
     } else {
-        effects->paintWindow(renderTarget, viewport, w, mask, deviceGeometry, data);
+        return effects->paintWindow(renderTarget, viewport, w, mask, deviceGeometry, data);
     }
 }
 
-void SmoothSwipeEffectScreen::paintWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceGeometry, WindowPaintData &data)
+bool SmoothSwipeEffectScreen::paintWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceGeometry, WindowPaintData &data)
 {
     if (!willBePainted(w)) {
-        return;
+        return true;
     }
 
     if (!isTranslated(w)) {
-        effects->paintWindow(renderTarget, viewport, w, mask, deviceGeometry, data);
-        return;
+        return effects->paintWindow(renderTarget, viewport, w, mask, deviceGeometry, data);
     }
 
     const int gridWidth = effects->desktopGridWidth();
@@ -326,16 +325,19 @@ void SmoothSwipeEffectScreen::paintWindow(const RenderTarget &renderTarget, cons
             const Rect screenArea = screen->geometry();
             const Rect logicalDamage = screenArea.translated(drawTranslation).intersected(screenArea);
 
-            effects->paintWindow(
+            if (!effects->paintWindow(
                 renderTarget, viewport, w, mask,
                 // Only paint the region that intersects the current screen and desktop.
                 deviceGeometry.intersected(viewport.mapToDeviceCoordinatesAligned(logicalDamage)),
-                data);
+                data)) {
+                return false;
+            }
 
             // Undo the translation for the next screen. I know, it hurts me too.
             data += QPoint(-drawTranslation.x(), -drawTranslation.y());
         }
     }
+    return true;
 }
 
 void SmoothSwipeEffect::postPaintScreen()
